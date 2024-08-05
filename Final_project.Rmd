@@ -1,0 +1,334 @@
+---
+title: "Final_project"
+output: html_document
+date: "2023-12-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Import libraries
+```{r}
+library(readr)
+library(MASS)
+library(dplyr)
+setwd("/Users/balashivanisp/Desktop/Classes/MATH 261A/LAB261A")
+```
+
+
+#Read the data
+```{r}
+hdi_data <- read_csv("HDI_final_data.csv")
+head(hdi_data)
+```
+
+#Build the model
+```{r}
+fit<-lm(HDI ~ le+eys+mys+gnicp, data=hdi_data)
+summary(fit)
+anova(fit)
+
+```
+
+
+#Boxcox
+```{r}
+box_fit <- boxcox(fit, lambda = seq(-10, 10, 0.1), plotit = TRUE)
+
+# Find the optimal lambda
+lambda <- box_fit$x[which.max(box_fit$y)]
+lambda
+# Confidence interval
+S <- max(box_fit$y) - 0.5 * qchisq(0.95, 1)
+lambda_confidence <- box_fit$x[box_fit$y > S]
+
+print("Confidence interval for lambda:")
+print(lambda_confidence)
+```
+
+#Residual Analysis
+```{r}
+std_resid <- rstudent(fit)
+
+qqnorm(std_resid)
+qqline(std_resid)
+
+plot(fitted.values(fit), std_resid)
+abline(h = 0, col = "red")
+```
+#Applying boxcox
+```{r}
+hdi_transformed <- hdi_data$HDI^2
+lm_model_boxcox <- lm(hdi_transformed ~ le+eys+mys+gnicp , data=hdi_data)
+summary(lm_model_boxcox)
+anova(lm_model_boxcox)
+
+qqnorm(resid(lm_model_boxcox))
+qqline(resid(lm_model_boxcox))
+
+plot(fitted.values(lm_model_boxcox), resid(lm_model_boxcox), main="Residual Plot", xlab="Fitted model", ylab="Residuals")
+abline(h=0, col='red')
+```
+
+#Model with indirect factors
+```{r}
+model<-lm(HDI~gnicp+ptr_p+ut+se_p+fr+che+pun+ppod+gee,data=hdi_data )
+summary(model)
+anova(model)
+std_resid <- rstudent(model)
+
+qqnorm(std_resid)
+qqline(std_resid)
+
+plot(fitted.values(model), std_resid)
+abline(h = 0, col = "red")
+
+```
+#Correlation and VIF of original model
+
+```{r}
+cor_matrix <- cor(hdi_data[, c( "gnicp", "ptr_p", "ut", "se_p", "fr", "che", "pun", "ppod", "gee")])
+print(cor_matrix)
+
+vif_values <- diag(solve(cor_matrix))
+
+max_vif_predictor <- names(vif_values)[which.max(vif_values)]
+
+vif_values
+```
+```{r}
+cor_matrix <- cor(hdi_data[, c( "gnicp", "le", "mys","eys")])
+print(cor_matrix)
+
+vif_values <- diag(solve(cor_matrix))
+
+max_vif_predictor <- names(vif_values)[which.max(vif_values)]
+
+vif_values
+```
+```{r}
+cor_matrix <- cor(hdi_data[, c("le", "che","ppod","pun")])
+print(cor_matrix)
+
+vif_values <- diag(solve(cor_matrix))
+
+max_vif_predictor <- names(vif_values)[which.max(vif_values)]
+
+vif_values
+```
+```{r}
+cor_matrix <- cor(hdi_data[, c(  "mys","eys","ptr_p","ut","se_p","fr","gee")])
+print(cor_matrix)
+
+vif_values <- diag(solve(cor_matrix))
+
+max_vif_predictor <- names(vif_values)[which.max(vif_values)]
+
+vif_values
+```
+```{r}
+fit3 <- lm(HDI~mys+eys+le, data=hdi_data)
+summary(fit3)
+anova(fit3)
+```
+
+#Health
+```{r}
+fit4 <- lm(HDI~le, data=hdi_data)
+summary(fit4)
+anova(fit4)
+```
+```{r}
+column_names <- c("HDI", "eys", "mys", "gnicp", "ptr_p", "ut", "se_p", "fr", "che", "pun", "ppod", "gee","le")
+
+for (i in column_names) {
+  cat("Column:", i, "\n")
+  cat("Number of Observations:", length(hdi_data[[i]]), "\n")
+  cat("Mean:", mean(hdi_data[[i]], na.rm = TRUE), "\n")
+  cat("Standard Deviation:", sd(hdi_data[[i]], na.rm = TRUE), "\n")
+  cat("Minimum:", min(hdi_data[[i]], na.rm = TRUE), "\n")
+  cat("Maximum:", max(hdi_data[[i]], na.rm = TRUE), "\n\n")
+}
+
+```
+```{r}
+fit4 <- lm(HDI ~ ptr_p + ut + se_p + fr , data=hdi_data)
+summary(fit4)
+```
+
+```{r}
+fit5<-lm(le ~ che + pun + ppod + gee, data=hdi_data)
+summary(fit5)
+anova(fit5)
+```
+
+
+```{r}
+fit6<-lm(HDI~gee,data=hdi_data)
+summary(fit6)
+```
+#Prediction over the years
+```{r}
+le_pred<- read_csv("us_pred.csv")
+head(le_pred)
+```
+
+```{r}
+test_data <- le_pred %>% filter(Year == 2020)
+train_data<-le_pred %>% filter(Year != 2020)
+
+model <- lm(le ~ mys + eys, data = train_data)
+
+predicted_le <- predict(model, newdata = test_data)
+observed_le <- test_data$le
+
+difference <- predicted_le - observed_le
+
+prediction_with_interval <- predict(model, newdata = test_data, interval = "prediction")
+
+lower_bound <- prediction_with_interval[, "lwr"]
+upper_bound <- prediction_with_interval[, "upr"]
+
+
+cat("Interval prediction for Life Expectancy for 2020 in United States [", lower_bound,upper_bound,"]\n")
+cat("Predicted Life Expectancy for 2020 in United States:", predicted_le, "\n")
+cat("Observed Life Expectancy for 2020 in United States:", observed_le, "\n")
+cat("Difference in the Predicted and Observed for 2020 in United States:", difference, "\n")
+
+```
+
+```{r}
+
+test_data <- le_pred %>% filter(Year == 2015)
+train_data<-le_pred %>% filter(Year != 2015)
+
+model <- lm(le ~ mys + eys, data = train_data)
+
+predicted_le <- predict(model, newdata = test_data)
+observed_le <- test_data$le
+
+difference <- predicted_le - observed_le
+
+prediction_with_interval <- predict(model, newdata = test_data, interval = "prediction")
+
+lower_bound <- prediction_with_interval[, "lwr"]
+upper_bound <- prediction_with_interval[, "upr"]
+
+
+cat("Interval prediction for Life Expectancy for 2015 in United States [", lower_bound,upper_bound,"]\n")
+cat("Predicted Life Expectancy for 2015 in United States:", predicted_le, "\n")
+cat("Observed Life Expectancy for 2015 in United States:", observed_le, "\n")
+cat("Difference (Predicted - Observed) for 2015 in United States:", difference, "\n")
+
+```
+```{r}
+min_max_scale <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Apply Min-Max scaling to the relevant columns
+scale_health <- min_max_scale(hdi_data$le)
+scale_mys <- min_max_scale(hdi_data$mys)
+scale_eys  <- min_max_scale(hdi_data$eys)
+scale_gni <- min_max_scale(hdi_data$gnicp)
+
+fit7 <- lm(hdi_data$HDI~scale_mys+scale_eys+scale_health)
+summary(fit7)
+anova(fit7)
+```
+```{r}
+min_max_scale <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Apply Min-Max scaling to the relevant columns
+hdi_data$scale_health <- min_max_scale(hdi_data$le)
+hdi_data$scale_mys <- min_max_scale(hdi_data$mys)
+hdi_data$scale_eys  <- min_max_scale(hdi_data$eys)
+hdi_data$scale_gni <- min_max_scale(hdi_data$gnicp)
+
+fit10 <- lm(hdi_data$HDI~scale_health)
+summary(fit10)
+anova(fit10)
+
+cor_matrix <- cor(hdi_data[,c( "HDI", "scale_health", "scale_mys","scale_eys")])
+print(cor_matrix)
+
+vif_values <- diag(solve(cor_matrix))
+
+max_vif_predictor <- names(vif_values)[which.max(vif_values)]
+
+vif_values
+
+cor_matrix1 <- cor(hdi_data[,c("scale_health", "scale_mys","scale_eys" )])
+print(cor_matrix1)
+
+vif_values1 <- diag(solve(cor_matrix1))
+
+max_vif_predictor <- names(vif_values1)[which.max(vif_values1)]
+
+vif_values1
+```
+
+```{r}
+min_max_scale <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Apply Min-Max scaling to the relevant columns
+scale_ptr <- min_max_scale(hdi_data$ptr_p)
+scale_ut <- min_max_scale(hdi_data$ut)
+scale_sp  <- min_max_scale(hdi_data$se_p)
+scale_gni <- min_max_scale(hdi_data$gnicp)
+scale_fr  <- min_max_scale(hdi_data$fr)
+scale_che  <- min_max_scale(hdi_data$che)
+scale_pun  <- min_max_scale(hdi_data$pun)
+scale_ppod <- min_max_scale(hdi_data$ppod)
+scale_gee <- min_max_scale(hdi_data$gee)
+
+
+
+```
+```{r}
+min_max_scale <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Apply Min-Max scaling to the relevant columns
+scale_ptr <- min_max_scale(hdi_data$ptr_p)
+scale_ut <- min_max_scale(hdi_data$ut)
+scale_sp  <- min_max_scale(hdi_data$se_p)
+scale_gni <- min_max_scale(hdi_data$gnicp)
+scale_fr  <- min_max_scale(hdi_data$fr)
+scale_che  <- min_max_scale(hdi_data$che)
+scale_pun  <- min_max_scale(hdi_data$pun)
+scale_ppod <- min_max_scale(hdi_data$ppod)
+scale_gee <- min_max_scale(hdi_data$gee)
+
+fit8 <- lm(hdi_data$HDI~scale_ptr+scale_ut+scale_sp+scale_fr+scale_che+scale_pun+scale_ppod+scale_gee)
+summary(fit8)
+anova(fit8)
+
+```
+
+```{r}
+min_max_scale <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Apply Min-Max scaling to the relevant columns
+scale_ptr <- min_max_scale(hdi_data$ptr_p)
+scale_ut <- min_max_scale(hdi_data$ut)
+scale_sp  <- min_max_scale(hdi_data$se_p)
+scale_gni <- min_max_scale(hdi_data$gnicp)
+scale_fr  <- min_max_scale(hdi_data$fr)
+scale_che  <- min_max_scale(hdi_data$che)
+scale_pun  <- min_max_scale(hdi_data$pun)
+scale_ppod <- min_max_scale(hdi_data$ppod)
+scale_gee <- min_max_scale(hdi_data$gee)
+
+fit9 <- lm(hdi_data$HDI~scale_che+scale_pun+scale_ppod+scale_gee)
+summary(fit9)
+anova(fit9)
+```
